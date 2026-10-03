@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Forbid CGO
+        run: test -z "$(grep -rn 'import "C"' --include='*.go' cmd internal || true)"
+      - run: gofmt -l cmd internal
+      - run: CGO_ENABLED=0 go build ./...
+      - run: CGO_ENABLED=0 go vet ./...
+
+  c-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.4 liblua5.4-dev
+      - run: cc -std=c11 -O2 -Wall -Wextra -Werror -pthread -Iinternal/daemon -c internal/daemon/worker.c -o worker.o
+      - run: cc -std=c11 -O2 -Wall -Wextra -Werror -pthread -DEBUILD_HAVE_LUA=1 -Iinternal/daemon $(pkg-config --cflags lua5.4) -c internal/daemon/worker.c -o worker-lua.o
+
+  lua-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
+      - run: for f in rules/*.lua; do luac -p "$f" || exit 1; done
+
+  rust-daemon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --manifest-path internal/daemon/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path internal/daemon/Cargo.toml --all-targets -- -D warnings
+      - run: cargo test --manifest-path internal/daemon/Cargo.toml

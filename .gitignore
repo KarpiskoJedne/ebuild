@@ -1,0 +1,9 @@
+# build outputs
+/ebuild
+/ebuild-daemon
+
+# all ebuild-managed build outputs, caches, traces and history
+.ebuild/
+
+# cargo / go caches live outside the repo; keep the tree clean
+target/

@@ -1,0 +1,58 @@
+# ebuild — enterprise sample configuration.
+# Schema version 1. Every `targets` entry maps 1:1 onto an executable Lua
+# build plan evaluated inside the native daemon sandbox (see rules/).
+# Toolchains are pinned via .tool-versions / asdf and verified by SHA-256.
+version: 1
+
+project:
+  name: shopexample
+  root: .
+
+toolchains:
+  gcc: "13.2.0"
+  rust: "1.78.0"
+  go: "1.24.0"
+  node: "20.12.0"
+  python: "3.12.2"
+  jdk: "21.0.2"
+
+targets:
+  - name: //core:parser
+    rule: cc_library
+    srcs: ["core/parser.c", "core/lexer.c"]
+    hdrs: ["core/parser.h"]
+    cflags: ["-O2", "-Wall"]
+
+  - name: //app:server
+    rule: cc_binary
+    srcs: ["app/main.c"]
+    deps: ["//core:parser"]
+
+  - name: //svc:api
+    rule: go_binary
+    srcs: ["svc/api/main.go"]
+    deps: ["//core:parser"]
+
+  - name: //web:ui
+    rule: typescript_app
+    srcs: ["web/ui/main.ts"]
+    out: dist/ui.js
+
+  - name: //proto:api
+    rule: protobuf_library
+    srcs: ["proto/api.proto"]
+    languages: ["go", "python"]
+
+  - name: //deploy:image
+    rule: docker_image
+    dockerfile: Dockerfile
+    context: .
+    tags: ["registry.local/shopexample:latest"]
+
+commands:
+  - name: test
+    cmd: go test ./...
+  - name: lint
+    cmd: golangci-lint run ./...
+    env: ["GOFLAGS=-count=1"]
+  vet: go vet ./...
